@@ -13,6 +13,7 @@
 namespace Leafo\ScssPhp;
 
 use Leafo\ScssPhp\Colors;
+use Leafo\ScssPhp\Number;
 use Leafo\ScssPhp\Parser;
 
 /**
@@ -76,11 +77,11 @@ class Compiler
     static protected $unitTable = array(
         'in' => array(
             'in' => 1,
-            'pt' => 72,
             'pc' => 6,
+            'pt' => 72,
+            'px' => 96,
             'cm' => 2.54,
             'mm' => 25.4,
-            'px' => 96,
             'q'  => 101.6,
         )
     );
@@ -928,7 +929,7 @@ class Compiler
                         break;
                     }
 
-                    $this->set($for->var, array('number', $start, ''));
+                    $this->set($for->var, new Number($start, ''));
                     $start += $d;
 
                     $ret = $this->compileChildren($for->children, $out);
@@ -1067,6 +1068,7 @@ class Compiler
             case 'fncall':
                 return true;
         }
+
         return false;
     }
 
@@ -1120,6 +1122,19 @@ class Compiler
                             $this->throwError("Cannot modulo by a number with units: $right[1]$right[2].");
                         }
 
+// TODO: this is problematic
+/*
+  We have to track the unit(s) in both the numerator and denominator, e.g.,
+    $temp: 1in * 2em;
+    div { margin-left: ($temp / 96px); }
+
+    $tmp: 1in * 1in;
+    div { margin-right: $tmp / 96px; }
+  becomes:
+    div { left: 2em; }
+
+    div { left: 1in; }
+*/
                         $unitChange = true;
                         $emptyUnit = $left[2] == '' || $right[2] == '';
                         $targetUnit = '' != $left[2] ? $left[2] : $right[2];
@@ -1157,6 +1172,12 @@ class Compiler
 
                     if (isset($out)) {
                         if ($unitChange && $out[0] == 'number') {
+// TODO: this is problematic
+/*
+  when cancelling units in numerator and denominator,
+  we should cancel matching units,
+  then convert and cancel from left to right?
+*/
                             $out = $this->coerceUnit($out, $targetUnit);
                         }
 
@@ -1164,6 +1185,10 @@ class Compiler
                     }
                 }
 
+// TODO: this is problematic
+/*
+  if not inExp, we should test the value for incompatible units
+*/
                 return $this->expToString($value);
             case 'unary':
                 list(, $op, $exp, $inParens) = $value;
@@ -1176,9 +1201,7 @@ class Compiler
                         case '+':
                             return $exp;
                         case '-':
-                            $exp[1] *= -1;
-
-                            return $exp;
+                            return new Number(-$exp[1], $exp[2]);
                     }
                 }
 
@@ -1217,7 +1240,7 @@ class Compiler
                 return $value;
             case 'string':
                 foreach ($value[2] as &$item) {
-                    if (is_array($item)) {
+                    if (is_array($item) || $item instanceof \ArrayAccess) {
                         $item = $this->reduce($item);
                     }
                 }
@@ -1309,10 +1332,10 @@ class Compiler
         if (isset(self::$unitTable['in'][$unit])) {
             $conv = self::$unitTable['in'][$unit];
 
-            return array('number', $value / $conv, 'in');
+            return new Number($value / $conv, 'in');
         }
 
-        return $number;
+        return new Number($value, $unit);
     }
 
     // $number should be normalized
@@ -1324,22 +1347,22 @@ class Compiler
             $value = $value * self::$unitTable[$baseUnit][$unit];
         }
 
-        return array('number', $value, $unit);
+        return new Number($value, $unit);
     }
 
     protected function opAddNumberNumber($left, $right)
     {
-        return array('number', $left[1] + $right[1], $left[2]);
+        return new Number($left[1] + $right[1], $left[2]);
     }
 
     protected function opMulNumberNumber($left, $right)
     {
-        return array('number', $left[1] * $right[1], $left[2]);
+        return new Number($left[1] * $right[1], $left[2]);
     }
 
     protected function opSubNumberNumber($left, $right)
     {
-        return array('number', $left[1] - $right[1], $left[2]);
+        return new Number($left[1] - $right[1], $left[2]);
     }
 
     protected function opDivNumberNumber($left, $right)
@@ -1348,12 +1371,12 @@ class Compiler
             $this->throwError('Division by zero');
         }
 
-        return array('number', $left[1] / $right[1], $left[2]);
+        return new Number($left[1] / $right[1], $left[2]);
     }
 
     protected function opModNumberNumber($left, $right)
     {
-        return array('number', $left[1] % $right[1], $left[2]);
+        return new Number($left[1] % $right[1], $left[2]);
     }
 
     // adding strings
@@ -1522,9 +1545,9 @@ class Compiler
     {
         $n = $left[1] - $right[1];
 
-        return array('number', $n ? $n / abs($n) : 0, '');
+        return new Number($n ? $n / abs($n) : 0, '');
 
-        // PHP7: return array('number', $left[1] <=> $right[1], '');
+        // PHP7: return new Number($left[1] <=> $right[1], '');
     }
 
     public function toBool($thing)
@@ -1656,7 +1679,7 @@ class Compiler
         $parts = array();
 
         foreach ($string[2] as $part) {
-            if (is_array($part)) {
+            if (is_array($part) || $part instanceof \ArrayAccess) {
                 $parts[] = $this->compileValue($part);
             } else {
                 $parts[] = $part;
@@ -2201,10 +2224,10 @@ class Compiler
         if (isset($returnValue)) {
             // coerce a php value into a scss one
             if (is_numeric($returnValue)) {
-                $returnValue = array('number', $returnValue, '');
+                $returnValue = new Number($returnValue, '');
             } elseif (is_bool($returnValue)) {
                 $returnValue = $returnValue ? self::$true : self::$false;
-            } elseif (! is_array($returnValue)) {
+            } elseif (! is_array($returnValue) && ! $returnValue instanceof \ArrayAccess) {
                 $returnValue = array('keyword', $returnValue);
             }
 
@@ -2750,7 +2773,7 @@ class Compiler
         $color = $this->assertColor($args[0]);
         $hsl = $this->toHSL($color[1], $color[2], $color[3]);
 
-        return array('number', $hsl[1], 'deg');
+        return new Number($hsl[1], 'deg');
     }
 
     protected static $libSaturation = array('color');
@@ -2759,7 +2782,7 @@ class Compiler
         $color = $this->assertColor($args[0]);
         $hsl = $this->toHSL($color[1], $color[2], $color[3]);
 
-        return array('number', $hsl[2], '%');
+        return new Number($hsl[2], '%');
     }
 
     protected static $libLightness = array('color');
@@ -2768,7 +2791,7 @@ class Compiler
         $color = $this->assertColor($args[0]);
         $hsl = $this->toHSL($color[1], $color[2], $color[3]);
 
-        return array('number', $hsl[3], '%');
+        return new Number($hsl[3], '%');
     }
 
     protected function adjustHsl($color, $idx, $amount)
@@ -2935,9 +2958,7 @@ class Compiler
     protected static $libPercentage = array('value');
     protected function libPercentage($args)
     {
-        return array('number',
-            $this->coercePercent($args[0]) * 100,
-            '%');
+        return new Number($this->coercePercent($args[0]) * 100, '%');
     }
 
     protected static $libRound = array('value');
@@ -3256,7 +3277,7 @@ class Compiler
 
         $result = strpos($stringContent, $substringContent);
 
-        return $result === false ? self::$null : array('number', $result + 1, '');
+        return $result === false ? self::$null : new Number($result + 1, '');
     }
 
     protected static $libStrInsert = array('string', 'insert', 'index');
@@ -3281,7 +3302,7 @@ class Compiler
         $string = $this->coerceString($args[0]);
         $stringContent = $this->compileStringContent($string);
 
-        return array('number', strlen($stringContent), '');
+        return new Number(strlen($stringContent), '');
     }
 
     protected static $libStrSlice = array('string', 'start-at', 'end-at');
@@ -3404,10 +3425,10 @@ class Compiler
                 $this->throwError("limit must be greater than or equal to 1");
             }
 
-            return array('number', mt_rand(1, $n), '');
+            return new Number(mt_rand(1, $n), '');
         }
 
-        return array('number', mt_rand(1, mt_getrandmax()), '');
+        return new Number(mt_rand(1, mt_getrandmax()), '');
     }
 
     protected function libUniqueId()
