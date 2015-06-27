@@ -12,8 +12,9 @@
 
 namespace Leafo\ScssPhp;
 
+use Leafo\ScssPhp\Block;
 use Leafo\ScssPhp\Compiler;
-use Leafo\ScssPhp\Number;
+use Leafo\ScssPhp\Node\Number;
 
 /**
  * SCSS parser
@@ -118,7 +119,7 @@ class Parser
      *
      * @param string $buffer;
      *
-     * @return \stdClass
+     * @return \Leafo\ScssPhp\Block
      */
     public function parse($buffer)
     {
@@ -220,7 +221,7 @@ class Parser
         // the directives
         if (isset($this->buffer[$this->count]) && $this->buffer[$this->count] == '@') {
             if ($this->literal('@media') && $this->mediaQueryList($mediaQueryList) && $this->literal('{')) {
-                $media = $this->pushSpecialBlock('media', $s);
+                $media = $this->pushSpecialBlock(Block::T_MEDIA, $s);
                 $media->queryList = $mediaQueryList[2];
 
                 return true;
@@ -233,7 +234,7 @@ class Parser
                 ($this->argumentDef($args) || true) &&
                 $this->literal('{')
             ) {
-                $mixin = $this->pushSpecialBlock('mixin', $s);
+                $mixin = $this->pushSpecialBlock(Block::T_MIXIN, $s);
                 $mixin->name = $mixinName;
                 $mixin->args = $args;
 
@@ -254,7 +255,7 @@ class Parser
                     $mixinName, isset($argValues) ? $argValues : null, null);
 
                 if (! empty($hasBlock)) {
-                    $include = $this->pushSpecialBlock('include', $s);
+                    $include = $this->pushSpecialBlock(Block::T_INCLUDE, $s);
                     $include->child = $child;
                 } else {
                     $this->append($child, $s);
@@ -303,7 +304,7 @@ class Parser
                 $this->argumentDef($args) &&
                 $this->literal('{')
             ) {
-                $func = $this->pushSpecialBlock('function', $s);
+                $func = $this->pushSpecialBlock(Block::T_FUNCTION, $s);
                 $func->name = $fnName;
                 $func->args = $args;
 
@@ -326,7 +327,7 @@ class Parser
                 $this->valueList($list) &&
                 $this->literal('{')
             ) {
-                $each = $this->pushSpecialBlock('each', $s);
+                $each = $this->pushSpecialBlock(Block::T_EACH, $s);
                 foreach ($varNames[2] as $varName) {
                     $each->vars[] = $varName[1];
                 }
@@ -341,7 +342,7 @@ class Parser
                 $this->expression($cond) &&
                 $this->literal('{')
             ) {
-                $while = $this->pushSpecialBlock('while', $s);
+                $while = $this->pushSpecialBlock(Block::T_WHILE, $s);
                 $while->cond = $cond;
 
                 return true;
@@ -358,7 +359,7 @@ class Parser
                 $this->expression($end) &&
                 $this->literal('{')
             ) {
-                $for = $this->pushSpecialBlock('for', $s);
+                $for = $this->pushSpecialBlock(Block::T_FOR, $s);
                 $for->var = $varName[1];
                 $for->start = $start;
                 $for->end = $end;
@@ -370,7 +371,7 @@ class Parser
             $this->seek($s);
 
             if ($this->literal('@if') && $this->valueList($cond) && $this->literal('{')) {
-                $if = $this->pushSpecialBlock('if', $s);
+                $if = $this->pushSpecialBlock(Block::T_IF, $s);
                 $if->cond = $cond;
                 $if->cases = array();
 
@@ -403,9 +404,9 @@ class Parser
 
                 if ($this->literal('@else')) {
                     if ($this->literal('{')) {
-                        $else = $this->pushSpecialBlock('else', $s);
+                        $else = $this->pushSpecialBlock(Block::T_ELSE, $s);
                     } elseif ($this->literal('if') && $this->valueList($cond) && $this->literal('{')) {
-                        $else = $this->pushSpecialBlock('elseif', $s);
+                        $else = $this->pushSpecialBlock(Block::T_ELSEIF, $s);
                         $else->cond = $cond;
                     }
 
@@ -440,7 +441,7 @@ class Parser
                 ($this->variable($dirValue) || $this->openString('{', $dirValue) || true) &&
                 $this->literal('{')
             ) {
-                $directive = $this->pushSpecialBlock('directive', $s);
+                $directive = $this->pushSpecialBlock(Block::T_DIRECTIVE, $s);
                 $directive->name = $dirName;
 
                 if (isset($dirValue)) {
@@ -507,7 +508,7 @@ class Parser
             }
 
             if ($this->literal('{')) {
-                $propBlock = $this->pushSpecialBlock('nestedprop', $s);
+                $propBlock = $this->pushSpecialBlock(Block::T_NESTED_PROPERTY, $s);
                 $propBlock->prefix = $name;
                 $foundSomething = true;
             } elseif ($foundSomething) {
@@ -525,13 +526,13 @@ class Parser
         if ($this->literal('}')) {
             $block = $this->popBlock();
 
-            if (isset($block->type) && $block->type == 'include') {
+            if (isset($block->type) && $block->type == Block::T_INCLUDE) {
                 $include = $block->child;
                 unset($block->child);
                 $include[3] = $block;
                 $this->append($include, $s);
             } elseif (empty($block->dontAppend)) {
-                $type = isset($block->type) ? $block->type : 'block';
+                $type = isset($block->type) ? $block->type : Block::T_BLOCK;
                 $this->append(array($type, $block), $s);
             }
 
@@ -603,11 +604,11 @@ class Parser
      * @param array   $selectors
      * @param integer $pos
      *
-     * @return \stdClass
+     * @return \Leafo\ScssPhp\Block
      */
     protected function pushBlock($selectors, $pos = null)
     {
-        $b = new \stdClass;
+        $b = new Block;
         $b->parent = $this->env; // not sure if we need this yet
 
         $b->sourcePosition = $pos;
@@ -637,7 +638,7 @@ class Parser
      * @param array   $selectors
      * @param integer $pos
      *
-     * @return \stdClass
+     * @return \Leafo\ScssPhp\Block
      */
     protected function pushSpecialBlock($type, $pos)
     {
@@ -720,7 +721,7 @@ class Parser
         if (($this->literal('only') && ($only = true) || $this->literal('not') && ($not = true) || true) &&
             $this->mixedKeyword($mediaType)
         ) {
-            $prop = array('mediaType');
+            $prop = array(Node::T_MEDIA_TYPE);
 
             if (isset($only)) {
                 $prop[] = array('keyword', 'only');
@@ -1716,7 +1717,7 @@ class Parser
         $s = $this->seek();
 
         if ($this->literal('$', false) && $this->keyword($name)) {
-            $out = array('var', $name);
+            $out = array(Node::T_VARIABLE, $name);
 
             return true;
         }

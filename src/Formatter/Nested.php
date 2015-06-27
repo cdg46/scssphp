@@ -38,7 +38,7 @@ class Nested extends Formatter
     /**
      * Adjust the depths of all children, depth first
      *
-     * @param \stdClass $block
+     * @param \Leafo\ScssPhp\Block $block
      */
     public function adjustAllChildren($block)
     {

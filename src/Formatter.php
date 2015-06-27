@@ -82,8 +82,8 @@ abstract class Formatter
     /**
      * Output lines inside a block
      *
-     * @param string    $inner
-     * @param \stdClass $block
+     * @param string               $inner
+     * @param \Leafo\ScssPhp\Block $block
      */
     protected function blockLines($inner, $block)
     {
@@ -98,7 +98,7 @@ abstract class Formatter
     /**
      * Output non-empty block
      *
-     * @param \stdClass $block
+     * @param \Leafo\ScssPhp\Block $block
      */
     protected function block($block)
     {
@@ -140,7 +140,8 @@ abstract class Formatter
     /**
      * Entry point to formatting a block
      *
-     * @param \stdClass $block An abstract syntax tree
+     * @param \Leafo\ScssPhp\Block $block An abstract syntax tree
+     *
      * @return string
      */
     public function format($block)

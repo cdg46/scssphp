@@ -10,14 +10,19 @@
  * @link http://leafo.net/scssphp
  */
 
-namespace Leafo\ScssPhp;
+namespace Leafo\ScssPhp\Node;
+
+use Leafo\ScssPhp\Node;
 
 /**
  * SCSS dimension + optional units
  *
+ * {@internal
+ * }}
+ *
  * @author Anthon Pang <anthon.pang@gmail.com>
  */
-class Number implements \ArrayAccess
+class Number extends Node implements \ArrayAccess
 {
     /**
      * @var integer|float
@@ -37,6 +42,7 @@ class Number implements \ArrayAccess
      */
     public function __construct($dimension, $unit)
     {
+        $this->type = Node::T_NUMBER;
         $this->dimension = $dimension;
         $this->units = $unit;
     }
@@ -46,6 +52,14 @@ class Number implements \ArrayAccess
      */
     public function offsetExists($offset)
     {
+        if ($offset === -2) {
+            return $sourceParser !== null;
+        }
+
+        if ($offset === -1) {
+            return true;
+        }
+
         if ($offset === 0) {
             return true;
         }
@@ -66,8 +80,16 @@ class Number implements \ArrayAccess
      */
     public function offsetGet($offset)
     {
+        if ($offset === -2) {
+            return $this->sourceParser;
+        }
+
+        if ($offset === -1) {
+            return $this->sourcePosition;
+        }
+
         if ($offset === 0) {
-            return 'number';
+            return $this->type;
         }
 
         if ($offset === 1) {
@@ -88,6 +110,10 @@ class Number implements \ArrayAccess
             $this->dimension = $value;
         } elseif ($offset === 2) {
             $this->units = $value;
+        } elseif ($offset == -1) {
+            $this->sourcePosition = $value;
+        } elseif ($offset == -2) {
+            $this->sourceParser = $value;
         }
     }
 
@@ -100,6 +126,10 @@ class Number implements \ArrayAccess
             $this->dimension = null;
         } elseif ($offset === 2) {
             $this->units = null;
+        } elseif ($offset === -1) {
+            $this->sourcePosition = null;
+        } elseif ($offset === -2) {
+            $this->sourceParser = null;
         }
     }
 
