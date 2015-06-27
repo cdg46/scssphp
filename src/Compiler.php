@@ -74,18 +74,6 @@ class Compiler
         'function' => '^',
     );
 
-    static protected $unitTable = array(
-        'in' => array(
-            'in' => 1,
-            'pc' => 6,
-            'pt' => 72,
-            'px' => 96,
-            'cm' => 2.54,
-            'mm' => 25.4,
-            'q'  => 101.6,
-        )
-    );
-
     static public $true = array(Node::T_KEYWORD, 'true');
     static public $false = array(Node::T_KEYWORD, 'false');
     static public $null = array(Node::T_NULL);
@@ -1144,23 +1132,6 @@ class Compiler
                     if (! isset($genOp) &&
                         $left[0] == Node::T_NUMBER && $right[0] == Node::T_NUMBER
                     ) {
-                        if ($opName == 'mod' && $right[2] != '') {
-                            $this->throwError("Cannot modulo by a number with units: $right[1]$right[2].");
-                        }
-
-// TODO: this is problematic
-/*
-  We have to track the unit(s) in both the numerator and denominator, e.g.,
-    $temp: 1in * 2em;
-    div { margin-left: ($temp / 96px); }
-
-    $tmp: 1in * 1in;
-    div { margin-right: $tmp / 96px; }
-  becomes:
-    div { left: 2em; }
-
-    div { left: 1in; }
-*/
                         $unitChange = true;
                         $emptyUnit = $left[2] == '' || $right[2] == '';
                         $targetUnit = '' != $left[2] ? $left[2] : $right[2];
@@ -1171,8 +1142,8 @@ class Compiler
                         }
 
                         if ($opName != 'mod') {
-                            $left = $this->normalizeNumber($left);
-                            $right = $this->normalizeNumber($right);
+                            $left = $left->normalize();
+                            $right = $right->normalize();
                         }
 
                         if ($opName == 'div' && ! $emptyUnit && $left[2] == $right[2]) {
@@ -1198,13 +1169,7 @@ class Compiler
 
                     if (isset($out)) {
                         if ($unitChange && $out[0] == Node::T_NUMBER) {
-// TODO: this is problematic
-/*
-  when cancelling units in numerator and denominator,
-  we should cancel matching units,
-  then convert and cancel from left to right?
-*/
-                            $out = $this->coerceUnit($out, $targetUnit);
+                            $out = $out->coerce($targetUnit);
                         }
 
                         return $out;
@@ -1348,37 +1313,11 @@ class Compiler
                 return $value;
 
             case Node::T_NUMBER:
-                return $this->normalizeNumber($value);
+                return $value->normalize();
 
             default:
                 return $value;
         }
-    }
-
-    // just does physical lengths for now
-    protected function normalizeNumber($number)
-    {
-        list(, $value, $unit) = $number;
-
-        if (isset(self::$unitTable['in'][$unit])) {
-            $conv = self::$unitTable['in'][$unit];
-
-            return new Number($value / $conv, 'in');
-        }
-
-        return new Number($value, $unit);
-    }
-
-    // $number should be normalized
-    protected function coerceUnit($number, $unit)
-    {
-        list(, $value, $baseUnit) = $number;
-
-        if (isset(self::$unitTable[$baseUnit][$unit])) {
-            $value = $value * self::$unitTable[$baseUnit][$unit];
-        }
-
-        return new Number($value, $unit);
     }
 
     protected function opAddNumberNumber($left, $right)
@@ -3091,7 +3030,7 @@ class Compiler
                 $this->throwError('%s is not a number', $item[0]);
             }
 
-            $number = $this->normalizeNumber($item);
+            $number = $item->normalize();
 
             if (null === $unit) {
                 $unit = $number[2];
@@ -3318,8 +3257,8 @@ class Compiler
             $this->throwError('Invalid argument(s) for "comparable"');
         }
 
-        $number1 = $this->normalizeNumber($number1);
-        $number2 = $this->normalizeNumber($number2);
+        $number1 = $number1->normalize();
+        $number2 = $number2->normalize();
 
         return $number1[2] == $number2[2] || $number1[2] == '' || $number2[2] == '';
     }

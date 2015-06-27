@@ -24,13 +24,25 @@ use Leafo\ScssPhp\Node;
  */
 class Number extends Node implements \ArrayAccess
 {
+    static protected $unitTable = array(
+        'in' => array(
+            'in' => 1,
+            'pc' => 6,
+            'pt' => 72,
+            'px' => 96,
+            'cm' => 2.54,
+            'mm' => 25.4,
+            'q'  => 101.6,
+        )
+    );
+
     /**
      * @var integer|float
      */
     public $dimension;
 
     /**
-     * @var string
+     * @var array
      */
     public $units;
 
@@ -40,11 +52,54 @@ class Number extends Node implements \ArrayAccess
      * @param mixed  $dimension
      * @param string $unit
      */
-    public function __construct($dimension, $unit)
+    public function __construct($dimension, $initialUnit)
     {
         $this->type = Node::T_NUMBER;
         $this->dimension = $dimension;
-        $this->units = $unit;
+        $this->units = $initialUnit;
+    }
+
+    /**
+     * Are units compatible?
+     *
+     * @param \Leafo\ScssPhp\Node\Number $number
+     *
+     * @return boolean
+     */
+    public function isCompatible($number)
+    {
+    }
+
+    public function modulo($right)
+    {
+        if ($opName == 'mod' && $right[2] != '') {
+            $this->throwError("Cannot modulo by a number with units: $right[1]$right[2].");
+        }
+    }
+
+    // $number should be normalized
+    public function coerce($unit)
+    {
+        $value = $this->dimension;
+        $baseUnit = $this->units;
+
+        if (isset(self::$unitTable[$baseUnit][$unit])) {
+            $value = $value * self::$unitTable[$baseUnit][$unit];
+        }
+
+        return new Number($value, $unit);
+    }
+
+    // just does physical lengths for now
+    public function normalize()
+    {
+        if (isset(self::$unitTable['in'][$this->units])) {
+            $conv = self::$unitTable['in'][$this->units];
+
+            return new Number($this->dimension / $conv, 'in');
+        }
+
+        return new Number($this->dimension, $this->units);
     }
 
     /**
