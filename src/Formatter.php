@@ -54,7 +54,7 @@ abstract class Formatter
      */
     public $assignSeparator;
 
-    abstract function __construct();
+    abstract public function __construct();
 
     /**
      * Return indentation (whitespace)

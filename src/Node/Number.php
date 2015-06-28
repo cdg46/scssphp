@@ -18,12 +18,23 @@ use Leafo\ScssPhp\Node;
  * SCSS dimension + optional units
  *
  * {@internal
+ *     This is a work-in-progress.
+ *
+ *     The \ArrayAccess interface is temporary until the migration is complete.
  * }}
  *
  * @author Anthon Pang <anthon.pang@gmail.com>
  */
 class Number extends Node implements \ArrayAccess
 {
+    /**
+     * @var integer
+     */
+    static public $precision = 5;
+
+    /**
+     * @var array
+     */
     static protected $unitTable = array(
         'in' => array(
             'in' => 1,
@@ -33,7 +44,26 @@ class Number extends Node implements \ArrayAccess
             'cm' => 2.54,
             'mm' => 25.4,
             'q'  => 101.6,
-        )
+        ),
+        'turn' => array(
+            'deg' => 180,
+            'grad' => 200,
+            'rad' => M_PI,
+            'turn' => 0.5,
+        ),
+        's' => array(
+            's' => 1,
+            'ms' => 1000,
+        ),
+        'Hz' => array(
+            'Hz' => 1,
+            'kHz' => 0.001,
+        ),
+        'dpi' => array(
+            'dpi' => 1,
+            'dpcm' => 2.54,
+            'dppx' => 96,
+        ),
     );
 
     /**
@@ -56,25 +86,10 @@ class Number extends Node implements \ArrayAccess
     {
         $this->type = Node::T_NUMBER;
         $this->dimension = $dimension;
-        $this->units = $initialUnit;
-    }
-
-    /**
-     * Are units compatible?
-     *
-     * @param \Leafo\ScssPhp\Node\Number $number
-     *
-     * @return boolean
-     */
-    public function isCompatible($number)
-    {
-    }
-
-    public function modulo($right)
-    {
-        if ($opName == 'mod' && $right[2] != '') {
-            $this->throwError("Cannot modulo by a number with units: $right[1]$right[2].");
-        }
+        $this->units = is_array($initialUnit)
+            ? $initialUnit
+            : ($initialUnit ? array($initialUnit => 1)
+                            : array());
     }
 
     // $number should be normalized
@@ -83,7 +98,7 @@ class Number extends Node implements \ArrayAccess
         $value = $this->dimension;
         $baseUnit = $this->units;
 
-        if (isset(self::$unitTable[$baseUnit][$unit])) {
+        if (0 && isset(self::$unitTable[$baseUnit][$unit])) {
             $value = $value * self::$unitTable[$baseUnit][$unit];
         }
 
@@ -93,7 +108,7 @@ class Number extends Node implements \ArrayAccess
     // just does physical lengths for now
     public function normalize()
     {
-        if (isset(self::$unitTable['in'][$this->units])) {
+        if (0 && isset(self::$unitTable['in'][$this->units])) {
             $conv = self::$unitTable['in'][$this->units];
 
             return new Number($this->dimension / $conv, 'in');
@@ -111,19 +126,11 @@ class Number extends Node implements \ArrayAccess
             return $sourceParser !== null;
         }
 
-        if ($offset === -1) {
-            return true;
-        }
-
-        if ($offset === 0) {
-            return true;
-        }
-
-        if ($offset === 1) {
-            return true;
-        }
-
-        if ($offset === 2) {
+        if ($offset === -1
+            || $offset === 0
+            || $offset === 1
+            || $offset === 2
+        ) {
             return true;
         }
 
@@ -135,24 +142,21 @@ class Number extends Node implements \ArrayAccess
      */
     public function offsetGet($offset)
     {
-        if ($offset === -2) {
-            return $this->sourceParser;
-        }
+        switch ($offset) {
+            case -2:
+                return $this->sourceParser;
 
-        if ($offset === -1) {
-            return $this->sourcePosition;
-        }
+            case -1:
+                return $this->sourcePosition;
 
-        if ($offset === 0) {
-            return $this->type;
-        }
+            case 0:
+                return $this->type;
 
-        if ($offset === 1) {
-            return $this->dimension;
-        }
+            case 1:
+                return $this->dimension;
 
-        if ($offset === 2) {
-            return $this->units;
+            case 2:
+                return $this->units;
         }
     }
 
@@ -189,10 +193,51 @@ class Number extends Node implements \ArrayAccess
     }
 
     /**
+     * @return boolean
+     */
+    public function unitless()
+    {
+        return ! count($this->units);
+    }
+
+    /**
+     * @return string
+     */
+    public function unitStr()
+    {
+        $numerators = array();
+        $denominators = array();
+
+        foreach ($this->units as $unit => $unitSize) {
+            if ($unitSize > 0) {
+                $numerators = array_pad($numerators, count($numerators) + $unitSize, $unit);
+                continue;
+            }
+
+            if ($unitSize < 0) {
+                $denominators = array_pad($denominators, count($denominators) + $unitSize, $unit);
+                continue;
+            }
+        }
+
+        return implode('*', $numerators) . (count($denominators) ? '/' . implode('*', $denominators) : '');
+    }
+
+    /**
      * {@inheritdoc}
      */
     public function __toString()
     {
-        return (string) $this->dimension . $this->units;
+        $value = round($this->dimension, self::$precision);
+
+        foreach ($this->units as $unit => $unitSize) {
+            if (count($this->units) !== 1 || $unitSize !== 1) {
+                $this->throwError('Not a valid CSS value');
+            }
+
+            return (string) $value . $unit;
+        }
+
+        return (string) $value;
     }
 }

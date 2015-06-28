@@ -15,10 +15,6 @@ namespace Leafo\ScssPhp;
 /**
  * SCSS block
  *
- * {@internal
- *     The conversion of blocks from \stdClass to Block is a work-in-progress.
- * }}
- *
  * @author Anthon Pang <anthon.pang@gmail.com>
  */
 class Block

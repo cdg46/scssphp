@@ -87,8 +87,6 @@ class Compiler
     protected $userFunctions = array();
     protected $registeredVars = array();
 
-    protected $numberPrecision = 5;
-
     protected $formatter = 'Leafo\ScssPhp\Formatter\Nested';
 
     private $indentLevel;
@@ -693,7 +691,7 @@ class Compiler
         }
 
         if ($m1 == 'not' && $m2 == 'not') {
-            # CSS has no way of representing "neither screen nor print"
+            // CSS has no way of representing "neither screen nor print"
             if ($t1 != $t2) {
                 return null;
             }
@@ -977,7 +975,7 @@ class Compiler
                 $mixin = $this->get(self::$namespaces['mixin'] . $name, false);
 
                 if (! $mixin) {
-                    $this->throwError("Undefined mixin $name");
+                    $this->throwError('Undefined mixin %s', $name);
                 }
 
                 $callingScope = $this->env;
@@ -1038,7 +1036,7 @@ class Compiler
                 break;
 
             default:
-                $this->throwError("unknown child type: $child[0]");
+                $this->throwError('Unknown child type: %s', $child[0]);
         }
     }
 
@@ -1099,8 +1097,11 @@ class Compiler
                 $left = $this->reduce($left, true);
                 $right = $this->reduce($right, true);
 
-                // special case: looks like css short-hand
-                if ($opName == 'div' && ! $inParens && ! $inExp && isset($right[2]) && $right[2] != '') {
+                // special case: looks like css shorthand
+                if ($opName == 'div' && ! $inParens && ! $inExp && isset($right[2])
+                    && (($right[0] !== Node::T_NUMBER && $right[2] != '')
+                    || ($right[0] === Node::T_NUMBER && ! $right->unitless()))
+                ) {
                     return $this->expToString($value);
                 }
 
@@ -1132,13 +1133,17 @@ class Compiler
                     if (! isset($genOp) &&
                         $left[0] == Node::T_NUMBER && $right[0] == Node::T_NUMBER
                     ) {
+                        if ($opName == 'mod' && ! $right->unitless()) {
+                            $this->throwError('Can\'t modulo by number with units: %s%s', $right[1], $right->unitStr());
+                        }
+
                         $unitChange = true;
-                        $emptyUnit = $left[2] == '' || $right[2] == '';
-                        $targetUnit = '' != $left[2] ? $left[2] : $right[2];
+                        $emptyUnit = $left->unitless() || $right->unitless();
+                        $targetUnit = $left->unitless() ? $right[2] : $left[2];
 
                         if ($opName != 'mul') {
-                            $left[2] = '' != $left[2] ? $left[2] : $targetUnit;
-                            $right[2] = '' != $right[2] ? $right[2] : $targetUnit;
+                            $left[2] = $left->unitless() ? $targetUnit : $left[2];
+                            $right[2] = $right->unitless() ? $targetUnit : $right[2];
                         }
 
                         if ($opName != 'mod') {
@@ -1147,15 +1152,15 @@ class Compiler
                         }
 
                         if ($opName == 'div' && ! $emptyUnit && $left[2] == $right[2]) {
-                            $targetUnit = '';
+                            $targetUnit = array();
                         }
 
                         if ($opName == 'mul') {
-                            $left[2] = '' != $left[2] ? $left[2] : $right[2];
-                            $right[2] = '' != $right[2] ? $right[2] : $left[2];
+                            $left[2] = $left->unitless() ? $right[2] : $left[2];
+                            $right[2] = $right->unitless() ? $left[2] : $right[2];
                         } elseif ($opName == 'div' && $left[2] == $right[2]) {
-                            $left[2] = '';
-                            $right[2] = '';
+                            $left[2] = array();
+                            $right[2] = array();
                         }
                     }
 
@@ -1426,7 +1431,7 @@ class Compiler
 
                 case '/':
                     if ($rval == 0) {
-                        $this->throwError("color: Can't divide by zero");
+                        $this->throwError('color: Can\'t divide by zero');
                     }
 
                     $out[] = (int) ($lval / $rval);
@@ -1439,7 +1444,7 @@ class Compiler
                     return $this->opNeq($left, $right);
 
                 default:
-                    $this->throwError("color: unknown op $op");
+                    $this->throwError('color: Unknown op %s', $op);
             }
         }
 
@@ -1583,7 +1588,7 @@ class Compiler
                 return $h;
 
             case Node::T_NUMBER:
-                return round($value[1], $this->numberPrecision) . $value[2];
+                return (string) $value;
 
             case Node::T_STRING:
                 return $value[1] . $this->compileStringContent($value) . $value[1];
@@ -1623,11 +1628,13 @@ class Compiler
                     $filtered[$this->compileValue($keys[$i])] = $this->compileValue($values[$i]);
                 }
 
-                array_walk($filtered, function (&$value, $key) { $value = $key . ': ' . $value; });
+                array_walk($filtered, function (&$value, $key) {
+                    $value = $key . ': ' . $value;
+                });
 
                 return '(' . implode(', ', $filtered) . ')';
 
-            case Node::T_INTERPOLATED: # node created by extractInterpolation
+            case Node::T_INTERPOLATED: // node created by extractInterpolation
                 list(, $interpolate, $left, $right) = $value;
                 list(,, $whiteLeft, $whiteRight) = $interpolate;
 
@@ -1639,7 +1646,7 @@ class Compiler
 
                 return $left . $this->compileValue($interpolate) . $right;
 
-            case Node::T_INTERPOLATE: # raw parse node
+            case Node::T_INTERPOLATE: // raw parse node
                 list(, $exp) = $value;
 
                 // strip quotes if it's a string
@@ -1660,7 +1667,7 @@ class Compiler
                 return 'null';
 
             default:
-                $this->throwError("unknown value type: $type");
+                $this->throwError('Unknown value type: %s', $type);
         }
     }
 
@@ -1870,15 +1877,15 @@ class Compiler
                     if ($hasVariable) {
                         $deferredKeywordArgs[$arg[0][1]] = $arg[1];
                     } else {
-                        $this->throwError("Mixin or function doesn't have an argument named $%s.", $arg[0][1]);
+                        $this->throwError('Mixin or function doesn\'t have an argument named $%s', $arg[0][1]);
                     }
                 } elseif ($args[$arg[0][1]][0] < count($remaining)) {
-                    $this->throwError("The argument $%s was passed both by position and by name.", $arg[0][1]);
+                    $this->throwError('The argument $%s was passed both by position and by name', $arg[0][1]);
                 } else {
                     $keywordArgs[$arg[0][1]] = $arg[1];
                 }
             } elseif (count($keywordArgs)) {
-                $this->throwError('Positional arguments must come before keyword arguments.');
+                $this->throwError('Positional arguments must come before keyword arguments');
             } elseif ($arg[2] == true) {
                 $val = $this->reduce($arg[1], true);
 
@@ -1916,7 +1923,7 @@ class Compiler
             } elseif (! empty($default)) {
                 continue;
             } else {
-                $this->throwError("Missing argument $name");
+                $this->throwError('Missing argument %s', $name);
             }
 
             $this->set($name, $this->reduce($val, true), true, $env);
@@ -2035,7 +2042,7 @@ class Compiler
             }
 
             if (! $parser->parseValue($strValue, $value)) {
-                throw new \Exception("failed to parse passed in variable $name: $strValue");
+                throw new \Exception('Failed to parse passed in variable %s: %s', $name, $strValue);
             }
 
             $this->set($name, $value);
@@ -2089,7 +2096,7 @@ class Compiler
 
     public function setNumberPrecision($numberPrecision)
     {
-        $this->numberPrecision = $numberPrecision;
+        Number::$precision = $numberPrecision;
     }
 
     public function setFormatter($formatterName)
@@ -2344,7 +2351,7 @@ class Compiler
         $value = $this->coerceMap($value);
 
         if ($value[0] != Node::T_MAP) {
-            $this->throwError('expecting map');
+            $this->throwError('Expecting map');
         }
 
         return $value;
@@ -2353,7 +2360,7 @@ class Compiler
     public function assertList($value)
     {
         if ($value[0] != Node::T_LIST) {
-            $this->throwError('expecting list');
+            $this->throwError('Expecting list');
         }
 
         return $value;
@@ -2365,13 +2372,13 @@ class Compiler
             return $color;
         }
 
-        $this->throwError('expecting color');
+        $this->throwError('Expecting color');
     }
 
     public function assertNumber($value)
     {
         if ($value[0] != Node::T_NUMBER) {
-            $this->throwError('expecting number');
+            $this->throwError('Expecting number');
         }
 
         return $value[1];
@@ -2380,7 +2387,7 @@ class Compiler
     protected function coercePercent($value)
     {
         if ($value[0] == Node::T_NUMBER) {
-            if ($value[2] == '%') {
+            if ($value[2] == array('%' => 1)) {
                 return $value[1] / 100;
             }
 
@@ -2647,7 +2654,7 @@ class Compiler
     protected function libIeHexStr($args)
     {
         $color = $this->coerceColor($args[0]);
-        $color[4] = isset($color[4]) ? round(255*$color[4]) : 255;
+        $color[4] = isset($color[4]) ? round(255 * $color[4]) : 255;
 
         return sprintf('#%02X%02X%02X%02X', $color[4], $color[1], $color[2], $color[3]);
     }
@@ -2808,7 +2815,7 @@ class Compiler
     protected function libLighten($args)
     {
         $color = $this->assertColor($args[0]);
-        $amount = 100*$this->coercePercent($args[1]);
+        $amount = 100 * $this->coercePercent($args[1]);
 
         return $this->adjustHsl($color, 3, $amount);
     }
@@ -2817,7 +2824,7 @@ class Compiler
     protected function libDarken($args)
     {
         $color = $this->assertColor($args[0]);
-        $amount = 100*$this->coercePercent($args[1]);
+        $amount = 100 * $this->coercePercent($args[1]);
 
         return $this->adjustHsl($color, 3, -$amount);
     }
@@ -2832,7 +2839,7 @@ class Compiler
         }
 
         $color = $this->assertColor($value);
-        $amount = 100*$this->coercePercent($args[1]);
+        $amount = 100 * $this->coercePercent($args[1]);
 
         return $this->adjustHsl($color, 2, $amount);
     }
@@ -2841,7 +2848,7 @@ class Compiler
     protected function libDesaturate($args)
     {
         $color = $this->assertColor($args[0]);
-        $amount = 100*$this->coercePercent($args[1]);
+        $amount = 100 * $this->coercePercent($args[1]);
 
         return $this->adjustHsl($color, 2, -$amount);
     }
@@ -3028,9 +3035,9 @@ class Compiler
 
             if (null === $unit) {
                 $unit = $number[2];
-                $originalUnit = $item[2];
-            } elseif ($unit !== $number[2]) {
-                $this->throwError('Incompatible units: "%s" and "%s".', $originalUnit, $item[2]);
+                $originalUnit = $item->unitStr();
+            } elseif ($unit != $number[2]) {
+                $this->throwError('Incompatible units: "%s" and "%s"', $originalUnit, $item->unitStr());
             }
 
             $numbers[$key] = $number;
@@ -3227,8 +3234,8 @@ class Compiler
     {
         $num = $args[0];
 
-        if ($num[0] == Node::T_NUMBER) {
-            return array(Node::T_STRING, '"', array($num[2]));
+        if ($num[0] === Node::T_NUMBER) {
+            return array(Node::T_STRING, '"', array($num->unitStr()));
         }
 
         return '';
@@ -3247,14 +3254,16 @@ class Compiler
     {
         list($number1, $number2) = $args;
 
-        if (! isset($number1[0]) || $number1[0] != Node::T_NUMBER || ! isset($number2[0]) || $number2[0] != Node::T_NUMBER) {
+        if (! isset($number1[0]) || $number1[0] != Node::T_NUMBER
+            || ! isset($number2[0]) || $number2[0] != Node::T_NUMBER
+        ) {
             $this->throwError('Invalid argument(s) for "comparable"');
         }
 
         $number1 = $number1->normalize();
         $number2 = $number2->normalize();
 
-        return $number1[2] == $number2[2] || $number1[2] == '' || $number2[2] == '';
+        return $number1[2] == $number2[2] || $number1->unitless() || $number2->unitless();
     }
 
     protected static $libStrIndex = array('string', 'substring');
@@ -3413,7 +3422,7 @@ class Compiler
             $n = $this->assertNumber($args[0]);
 
             if ($n < 1) {
-                $this->throwError("limit must be greater than or equal to 1");
+                $this->throwError('limit must be greater than or equal to 1');
             }
 
             return new Number(mt_rand(1, $n), '');

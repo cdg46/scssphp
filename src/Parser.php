@@ -144,7 +144,7 @@ class Parser
         }
 
         if (! empty($this->env->parent)) {
-            $this->throwParseError('unclosed block');
+            $this->throwParseError('Unclosed block');
         }
 
         if ($this->charset) {
@@ -653,7 +653,7 @@ class Parser
         $block = $this->env;
 
         if (empty($block->parent)) {
-            $this->throwParseError('unexpected }');
+            $this->throwParseError('Unexpected }');
         }
 
         $this->env = $block->parent;
@@ -1195,7 +1195,9 @@ class Parser
         $keys = array();
         $values = array();
 
-        while ($this->genericList($key, 'expression') && $this->literal(':') && $this->genericList($value, 'expression')) {
+        while ($this->genericList($key, 'expression') && $this->literal(':')
+            && $this->genericList($value, 'expression')
+        ) {
             $keys[] = $key;
             $values[] = $value;
 

@@ -16,8 +16,9 @@ namespace Leafo\ScssPhp;
  * SCSS node
  *
  * {@internal
- *     The conversion of nodes from array('type', ...) to Node subclasses
- *     is a work-in-progress. To ease migration, we use the \ArrayAccess interface.
+ *     This is a work-in-progress.
+ *
+ *     We are converting nodes from array('type', ...) to Node subclasses.
  * }}
  *
  * @author Anthon Pang <anthon.pang@gmail.com>

@@ -61,6 +61,7 @@ class FailingTest extends \PHPUnit_Framework_TestCase
      */
     public function provideFailing()
     {
+        // @codingStandardsIgnoreStart
         return array(
             array(
                 '#28 - @extend working unexpected', <<<'END_OF_SCSS'
@@ -390,6 +391,7 @@ END_OF_EXPECTED
             ),
 *************************************************************/
         );
+        // @codingStandardsIgnoreEnd
     }
 
     private function compile($str)
